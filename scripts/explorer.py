@@ -23,16 +23,10 @@ def explore():
         print("EXPLORATION COMPLETED")
     else:
         exploration_counter=exploration_counter+1
-    
-def navigate():
-    print("navigating to the goal")
-    ## NAVIGATION ALGORITHM ##
-    # read setpoint topic
-     
-    
+
 if __name__ == '__main__':
-    print("------starting turtlebot control------")
-    rospy.init_node('turtle_motion',anonymous=True)
+    print("------starting turtlebot exploration------")
+    rospy.init_node('turtle_explorer',anonymous=True)
     
     
     # subscribe setpoint

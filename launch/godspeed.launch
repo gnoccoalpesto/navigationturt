@@ -13,16 +13,15 @@
     <arg name="gui" value="$(arg gui)"/>
   </include>
 
-  <!-- SLAM --><!--
+  <!-- SLAM -->
   <include file="$(find turtlebot3_slam)/launch/turtlebot3_slam.launch">
     <arg name="slam_methods" value="$(arg slam_methods)"/>
-  </include>-->
+  </include>
 
-  
   <!-- MONITOR NODE --><!--
-  <node name="mymonitor" 
+  <node name="turt_monitor" 
 	pkg="navigationturt" 
-	type="state_monitor.py" 
+	type="monitor.py" 
 	respawn="false" 
 	output="screen" 
 	args="" 
@@ -30,18 +29,33 @@
   />-->
 
   <!-- CONTROL NODE -->
-  <node name="turtle_control" 
+  <node name="turt_control" 
 	pkg="navigationturt" 
-	type="navigation_controller.py" 
+	type="navigator.py" 
 	respawn="false" 
 	output="screen" 
 	args=""
 	launch-prefix="xterm -e /bin/bash -c 'sleep $(arg node_start_delay); $0 $@' " 
-  /><!-- -->
+  />
 
-  <!-- MAPPING NODE -->
-  <!-- eg: spawned, map saved, died, respawned --><!--
+  <group if="$(arg exploration_mode)">
+	  <!-- EXPLORATION NODE -->
+	  <node name="turt_explore" 
+		pkg="navigationturt" 
+		type="explorer.py" 
+		respawn="false" 
+		output="screen" 
+		args=""
+		launch-prefix="xterm -e /bin/bash -c 'sleep $(arg node_start_delay); $0 $@' " 
+	  />
+  	  <!-- MAPPER NODE -->
+	    <!-- eg: spawned, map saved, died, respawned --><!--
   <node name="" pkg="navigationturt" type=""  respawn="false" output="screen" args="" />
-	-->
+	--> 
+  </group>
+
+  <group unless="$(arg exploration_mode)">
+  	<!-- DATA AND OBJECTIVES LOADER NODE -->
+  </group>
 
 </launch>
