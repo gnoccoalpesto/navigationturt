@@ -1,17 +1,34 @@
 #!/usr/bin/env python
 
+from actionlib.action_server import ActionServer
 import rospy
-from navigationturt.msg import Setpoint
+from navigationturt.msg import Setpoint 
+from navigationturt.msg import SetpointAction
 from geometry_msgs.msg import Twist#, Vector3
 from nav_msgs.msg import Odometry
-# implement odometry msgs
-import os
+import actionlib
 import math
-#import numpy as np
 
 
-class navigatorNode():
+class regulatorNode():
     def __init__(self):
+        self.VEL_ANGULAR_MAX=0.3
+        self.VEL_LINEAR_MAX=0.3
+        self.VEL_ANGULAR_MIN=0.1
+        self.VEL_LINEAR_MIN=0.1
+        self.lever=0.05
+        self.MIN_CONTROL_X=0.3
+        self.ERROR_THRESHOLD=0.1
+
+        # self.controlMode='PROPORTIONAL'
+        self.controlMode=rospy.get_param('/control_mode','PROPORTIONAL')
+
+        self.KX=0.2
+        self.KY=0.2
+        self.control1=0
+        self.control2=0
+        self.KControl1=1
+        self.KControl2=1
 
         self.setpointX=0
         self.setpointY=0
@@ -22,7 +39,6 @@ class navigatorNode():
         self.currentOrientation=0
         self.velocityX=0
         self.velocityY=0
-        self.lever=0.3
 
         self.robotStuck=False
         self.previousPositionX=0
@@ -31,20 +47,34 @@ class navigatorNode():
         self.lastMotilePositionY=0
         self.setpointBackup=(0,0)
 
+        self.velocityTopic= rospy.get_param('~velocity_topic', '/cmd_vel')
         self.setpointTopic = rospy.get_param('~setpoint_topic', '/Setpoint')
         self.odometryTopic= rospy.get_param('~odometry_topic','/odom')
 
-        # setpoint publisher
-        self.setpointCommand = rospy.Publisher(self.setpointTopic,Setpoint,\
-                                                queue_size=10)
-                                                
+        # setpoint action server
+        self.setpointServer=actionlib.SimpleActionServer('setpoint_server',SetpointAction,\
+                                                        self.actionCallback,False)
+        self.setpointServer.start()
+        #always start the server when ready to process goals
+        #use wait_for_server() in the client to exploit this
+
+        # setpoint subscriber
+        self.setpointListener = rospy.Subscriber(self.setpointTopic,Setpoint,\
+                                                 self.setpointCallback,queue_size=5)
         # odometry subscriber
         self.odometryListener=rospy.Subscriber(self.odometryTopic, Odometry,\
                                                 self.odometryCallback, queue_size=5)
         
+        # velocity publisher
+        self.velocityCommand=rospy.Publisher(self.velocityTopic,Twist,queue_size=5)
+        self.velocityMessage=Twist()
+
         #timer
-        # self.collisionTimer=rospy.Timer(rospy.Duration(0.5),self.collisionTimerCallback)
-        # self.navigationTimer=rospy.Timer(rospy.Duration(0.01),self.navigaztionCallback)
+        self.regulatorTimer=rospy.Timer(rospy.Duration(0.01),self.regulatorCallback)
+
+    def actionCallback(self,goal):
+        print("debug")
+        self.setpointServer.set_succeeded()
 
 
     def setpointCallback(self,data):
@@ -63,14 +93,9 @@ class navigatorNode():
         self.currentOrientation = math.atan2(siny_cosp,cosy_cosp)
         self.currentPositionX = position.x + self.lever*math.cos(self.currentOrientation)
         self.currentPositionY = position.y + self.lever*math.sin(self.currentOrientation)
+    
 
-
-    '''
-    def mapCallback(self,data):
-    '''
-
-
-    def regulatorTimerCallback(self,data):
+    def regulatorCallback(self,data):
 
         if not self.setpointReached:
 
@@ -125,38 +150,19 @@ class navigatorNode():
                 (self.setpointX,self.setpointY)=self.setpointBackup
 
 
-    def collisionTimerCallback(self,event=None):
-        if not self.setpointReached:
-            if abs(self.currentPositionX-self.previousPositionX)<0.001 \
-            and abs(self.currentPositionY-self.previousPositionY)<0.001:
-            
-                print("I'm stuck, going back")
-                self.robotStuck=True
-                self.setpointBackup=(self.setpointX,self.setpointY)
-                self.setpointReached=False
-                self.setpointX=self.lastMotilePositionX
-                self.setpointY=self.lastMotilePositionY
-
-            else:
-                self.lastMotilePositionX=self.currentPositionX
-                self.lastMotilePositionY=self.currentPositionY
-
-            self.previousPositionX=self.currentPositionX
-            self.previousPositionY=self.currentPositionY
-
-
-
 if __name__ == '__main__':
-    initialMessage = rospy.get_param('~message', '------starting turtlebot navigator------')
-    nodeName=rospy.get_param('~node_name', 'turtlebot_navigator')
-
+    initialMessage = rospy.get_param('~message', '------starting turtlebot regulator------')
     print(initialMessage)
-    rospy.init_node(nodeName,anonymous=True)
 
-    turtlenavigator=navigatorNode()
+    # nodeName=rospy.get_param('~node_name', 'turtlebot_regulator')
+    # rospy.get_name()#only after init_node
+    
+    rospy.init_node(rospy.get_param\
+                ('~node_name', 'turtlebot_regulator'),anonymous=True)
+
+    turtleRegulator=regulatorNode()
     
     try:
         rospy.spin()
-
     except KeyboardInterrupt:
         rospy.loginfo("turtle motion aborted!")

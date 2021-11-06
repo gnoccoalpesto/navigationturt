@@ -1,0 +1,1 @@
+map_20211018_125057 goal da frontier[len/2]

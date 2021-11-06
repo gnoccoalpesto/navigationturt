@@ -1,0 +1,10 @@
+#goal
+float32 x_setpoint
+float32 y_setpoint
+---
+#result
+bool setpoint_reached
+---
+#feedback
+float32 x_distance
+float32 y_distance

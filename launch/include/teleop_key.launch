@@ -1,0 +1,15 @@
+<launch>
+  <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]"/>
+  <arg name="node_start_delay" default="1.0"/>
+  <param name="model" value="$(arg model)"/>
+
+  <!-- turtlebot3_teleop_key already has its own built in velocity smoother -->
+  <node     pkg="turtlebot3_teleop" 
+            type="turtlebot3_teleop_key" 
+            name="turtlebot3_teleop_keyboard"  
+            respawn="false" 
+            output="screen" 
+            args="" 
+            launch-prefix="xterm -e /bin/bash -c 'sleep $(arg node_start_delay); $0 $@' "
+  />
+</launch>

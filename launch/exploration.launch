@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<launch>
+  <!--env name="TURTLEBOT3_MODEL" value="burger"/-->
+  <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]"/>
+  <arg name="map_file" default="$(find navigationturt)/maps/map.yaml"/>
+  <arg name="slam_methods" default="gmapping"/>
+  <arg name="node_start_delay" default="1.0"/>
+  <arg name="open_rviz" default="true"/>
+  <arg name="teleoperation_mode" default="false"/>
+
+
+  <!-- SLAM -->
+  <include file="$(find navigationturt)/launch/include/slam.launch">
+    <arg name="slam_methods" value="$(arg slam_methods)"/>
+    <arg name="open_rviz" value="$(arg open_rviz)"/>
+  </include><!---->
+
+  <group unless="$(arg teleoperation_mode)">
+  <!-- EXPLORATION NODE -->
+    <node name="explorer" 
+          pkg="navigationturt" 
+          type="explorer.py" 
+          respawn="true" 
+          output="screen" 
+          args="" 
+	        launch-prefix="xterm -e /bin/bash -c 'sleep $(arg node_start_delay); $0 $@' "
+          /><!---->
+  </group>
+
+      <!-- MAPPER NODE -->
+  <node name="mapper" 
+        pkg="navigationturt" 
+        type="mapper.py"  
+        respawn="true" 
+        output="screen" 
+        args="" >
+    <param name='~map_location' value="/catkin_ws/src/navigationturt/maps/map"/>
+  </node><!--
+	      launch-prefix="xterm -e /bin/bash -c 'sleep $(arg node_start_delay); $0 $@' "
+        -->
+
+
+
+</launch>

@@ -1,2 +1,3 @@
 float32 x_setpoint
 float32 y_setpoint
+float32 teta_setpoint
