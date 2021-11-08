@@ -2,12 +2,8 @@
 
 import numpy as np
 
-a=np.zeros((3,3),dtype=bool)
-a[:2,:2]=True
-b=np.where(a)
-# b=np.array(zip(b[0],b[1]))
-b=zip(b[0],b[1])
-ps=[(0,0),(0,1)]
-for p in ps:
-    print(p)
-    if p in b: print('yes')
+a=[(1,1),(1,2),(1,3),(1,4)]
+ps=[(2,1),(1,1),(1,2),(2,3),(1,3)]
+# b=[x for x in a if not x in ps]
+b=a.remove(ps[0])
+print(b)

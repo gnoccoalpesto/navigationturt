@@ -83,6 +83,8 @@ class cleaningNode:
         self.REQUIRED_ENERGY=10E-3# [joule] for each tile
         self.REQUIRED_ENERGY_GRAPHICAL=127# represents self.REQUIRED_ENERGY graphically in rviz
         self.GRAPHICAL_RATIO=self.REQUIRED_ENERGY_GRAPHICAL/self.REQUIRED_ENERGY
+        self.AMOUNT_THRESHOLD=3#[%] of points that can be left out of cleaning
+        self.totalToBeCleaned=[]# will store the total amount of points to be cleaned in the room
         # topics to listen
         self.laserTopic=rospy.get_param('~laserscan_topic','/scan')
         self.odometryTopic= rospy.get_param('~odometry_topic','/odom')# trying to use navigator one
@@ -93,7 +95,7 @@ class cleaningNode:
         # self.MAP_FRAME= rospy.get_param('~map_frame','map')
         # self.LASER_FRAME= rospy.get_param('~laser_frame','scan')
         # initialize map
-        MAP_RESOLUTION=0.09#[meters]
+        MAP_RESOLUTION=0.07#[meters]
         self.initializeMap(MAP_RESOLUTION)
         # uv map publisher
         self.mapChatter=rospy.Publisher(self.UVmapTopic,OccupancyGrid,queue_size=5)
@@ -235,8 +237,8 @@ class cleaningNode:
             # adds point to the list of unreachable
             x=nextCleaningPoint.x
             y=nextCleaningPoint.y
-            self.unreachablePoints.append((y,x))
-            print('discarged points (y,x)\n{}'.format(self.unreachablePoints))
+            unreachable_point=y,x
+            self.unreachablePoints.append(unreachable_point)
             if self.EXECUTE_RECOVERY_BEHAVIOUR:
             # recovery behaviour
                 recovery_method='proportional'
@@ -264,8 +266,9 @@ class cleaningNode:
                 print('')
         elif request:
             # wait few seconds to clean the area
-            print('cleaning this area\n')
-            rospy.sleep(4)
+            area_cleaning_duration=4#[seconds]
+            print('cleaning this area for {} seconds\n'.format(area_cleaning_duration))
+            rospy.sleep(area_cleaning_duration)
         # checks if cleaning operation is terminated;
         if not self.roomIsCleaned():
             # if not: calls a new instance of this routine
@@ -274,30 +277,22 @@ class cleaningNode:
 
     def roomIsCleaned(self):
     # checks if all points in selected room received enough energy
-        status= np.min(self.globalUVamount[self.selectedRoom.roomMask])==self.REQUIRED_ENERGY
-        # status= np.min(self.globalUVamount*self.selectedRoom.roomMask)==self.REQUIRED_ENERGY
+        # status= np.min(self.globalUVamount[self.selectedRoom.roomMask])==self.REQUIRED_ENERGY
+        # checks if amounts of points to be cleaned is below a specidic threshold
+        status=int(100*self.amountToBeCleaned/self.totalToBeCleaned)<self.AMOUNT_THRESHOLD
         if status:
             self.motionTimer.shutdown()
             self.cleaningTimer.shutdown()
-        return False
         return status
-
-        # NOTE add possibility to change values inside navigation node
-        #   also tune the PROXIMITY_DISTANCE from goal
           
     def selectNextCleaningPoint(self,far_point=False):
         '''selects the best point to clean with respect to:
                 distance, point and neighbourhood energy received'''
         # extract points which didn't received enough energy yet
         points=self.pointsRequiringEnergy()
-        # temp=points
-        # print(shape(points))
-        # selects only points far from obstacles
-        # points2=self.pointsFarFromObstacles(points)
-        # print(shape(points))
-        # rospy.sleep(1000)
-        # if points==[]:points=temp
-        points=self.permittedPoints(points)
+        # removes points that cannot be reached
+        temp=self.permittedPoints(points)
+        if temp!=[]:points=temp
         scores=[]
         for x,y in points:
         # for y,x in points:
@@ -326,7 +321,7 @@ class cleaningNode:
             energies.append(self.globalUVamount[int(x),int(y)])
             neigh_energies.append(np.average(self.globalUVamount[\
               int(x-(neigh_edge**2-1)/2):int(x+(neigh_edge**2-1)/2),int(y-(neigh_edge**2-1)/2):int(y+(neigh_edge**2-1)/2)]))
-        # adds columns to score array
+        # concatenates columns to score array
         scores=np.c_[scores,np.array(energies),np.array(neigh_energies)]
         # computes and minimize the score to find the next goal
         results=self.computeScore(scores)
@@ -336,30 +331,40 @@ class cleaningNode:
 
     def pointsRequiringEnergy(self):
     # returns MAP coordinates of points with less than required UV amount
-        results=[]
+        result=[]
         mask=np.where(self.selectedRoom.roomMask)
         mask= zip(mask[0],mask[1])
         indeces=(np.where(self.selectedRoom.roomMask*self.globalUVamount<self.REQUIRED_ENERGY))
         indeces= zip(indeces[0],indeces[1])# format: y(row), x(col)
-        #  indeces= zip(indeces[1],indeces[0])# format: x, y
         for index in indeces:
-            # excludes points not in the room or already discharged
-            if index in mask:results.append(index)
-            # if index in mask or not index in self.unreachablePoints:results.append(index)
-            if index in self.unreachablePoints:print('{} in discharged points'.format(index))
-        return results
+            # excludes points not in the room
+            if index in mask:result.append(index)
+        # amount of points still requiring energy
+        self.amountToBeCleaned=len(result)
+        # initializes the total amount of points to be cleaned
+        if self.totalToBeCleaned==[]:self.totalToBeCleaned=self.amountToBeCleaned
+        # print('percentage of cleaned points {}'.format(int(100*(1-self.amountToBeCleaned/self.totalToBeCleaned))))
+        # TODO NOT WORKING
+        return result
 
     def permittedPoints(self,points):
     # check if any of the points requiring energy must be avoided
-        result=[]
-        for point in points:
-            if point in self.unreachablePoints:
-                print('point {} in not permitted points')
-            else: result.append(point)
+        # print('remaining tiles to be cleaned {}'.format(self.amountToBeCleaned))
+        # removes points alreasy known to be unreachable
+        remotion_method=''
+        if remotion_method=='comprehension':
+            result=[point for point in points if not point in self.unreachablePoints]
+        elif remotion_method=='filter':
+            result=filter(lambda point: point not in self.unreachablePoints,points)
+        elif remotion_method=='remove':
+            for point in self.unreachablePoints:
+                try: points.remove(point);result=points
+                except ValueError:pass
+        elif remotion_method=='set':
+            result=list(set(points)-set(self.unreachablePoints))
+        else: result=points
+        # self.amountToBeCleaned=len(result)
         return result
-        # discarded points: [(y,x)], in NOT WORKING
-
-
 
     # def pointsFarFromObstacles(self,points):#,radius=0):
     # # TODO NOT WORKING
@@ -393,31 +398,37 @@ class cleaningNode:
         ave_dist=np.average(distances)
         distances=distances/ave_dist
         # coeff_dist=0.67
-        coeff_dist=0.55
-        # coeff_dist=0
+        # TODO coeff function of number of unreachable points
+        # the higher this coeficients, the better
+        # discount_dist=0.55
+        discount_dist=self.adaptiveDistanceDiscount()
+        # cost_dist=0
         # global_costs=scores[:,3]
         # ave_glob=np.average(global_costs)
         # global_costs=global_costs/ave_glob
-        # coeff_glob=0.67
+        # discount_glob=0.67
         locals=scores[:,[-2]]
         ave_loc=np.average(locals)
         locals=locals/ave_loc
-        # coeff_loc=0.35
-        coeff_loc=0
+        # discount_loc=0.35
+        discount_loc=0
         neighboorhood=scores[:,[-1]]
         ave_nei=np.average(neighboorhood)
         neighboorhood=neighboorhood/ave_nei
-        coeff_nei=0.55
+        discount_nei=0.55
         # coeff_nei=0
         results=np.zeros((len(scores),1))#+rand_comp
-        if not coeff_dist==0: results=results+distances/coeff_dist
-        # if not coeff_glob==0: results=results+global_costs/coeff_glob
-        if not coeff_loc==0: results=results+locals/coeff_loc
-        if not coeff_nei==0: results=results+neighboorhood/coeff_nei
-        rand_comp=0.2*np.random.rand(len(scores),1)+np.ones((len(scores),1))
+        if not discount_dist==0: results=results+distances/discount_dist
+        # if not discount_glob==0: results=results+global_costs/discount_glob
+        if not discount_loc==0: results=results+locals/discount_loc
+        if not discount_nei==0: results=results+neighboorhood/discount_nei
+        rand_comp=3.6*np.random.rand(len(scores),1)+np.ones((len(scores),1))
         results=[a*b for a,b in zip(results,rand_comp)]
         return results
 
+    def adaptiveDistanceDiscount(self,base_value=0.55,ratio=0.9):
+    # returns increasing discount the more the unreachable points
+        return base_value+ratio*len(self.unreachablePoints)
 
     # CLEANING ###################################################
 
@@ -446,7 +457,7 @@ class cleaningNode:
             except Exception: pass
             # ranges in radial direction
             for distance in range(robotMencumbrance,coveredDistance+1):
-                # round approximation
+                # truncate approximation
                 point_x=int(currentMpoint.x+distance*math.cos(angle))
                 point_y=int(currentMpoint.y+distance*math.sin(angle))
                 pointM=(point_x,point_y)
