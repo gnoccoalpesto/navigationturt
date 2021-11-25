@@ -95,7 +95,7 @@ class cleaningNode:
         # self.MAP_FRAME= rospy.get_param('~map_frame','map')
         # self.LASER_FRAME= rospy.get_param('~laser_frame','scan')
         # initialize map
-        MAP_RESOLUTION=0.07#[meters]
+        MAP_RESOLUTION=0.10#[meters]
         self.initializeMap(MAP_RESOLUTION)
         # uv map publisher
         self.mapChatter=rospy.Publisher(self.UVmapTopic,OccupancyGrid,queue_size=5)
@@ -142,10 +142,10 @@ class cleaningNode:
         # self.navigator.requestNewGoal(startingPoint)
         # initiate navigation call
         self.unreachablePoints=[]
-        self.EXECUTE_RECOVERY_BEHAVIOUR=True
+        # self.EXECUTE_RECOVERY_BEHAVIOUR=True
         self.EXECUTE_RECOVERY_BEHAVIOUR=False
-        self.motionTimer=rospy.Timer(rospy.Duration(NODE_START_DELAY),\
-            self.navigationTimerCallback,oneshot=True)
+        self.operationTimer=rospy.Timer(rospy.Duration(NODE_START_DELAY),\
+            self.operationTimerCallback,oneshot=True)
         
     
     # DATA #######################################################
@@ -226,7 +226,7 @@ class cleaningNode:
 
     # MOTION #######################################################
 
-    def navigationTimerCallback(self,event=None):
+    def operationTimerCallback(self,event=None):
     # motion routine
         # computes and requests next goal
         nextCleaningPoint=self.selectNextCleaningPoint()#far_point=True)
@@ -272,8 +272,8 @@ class cleaningNode:
         # checks if cleaning operation is terminated;
         if not self.roomIsCleaned():
             # if not: calls a new instance of this routine
-            self.motionTimer=rospy.Timer(rospy.Duration(0.05),\
-              self.navigationTimerCallback,oneshot=True)
+            self.operationTimer=rospy.Timer(rospy.Duration(0.05),\
+              self.operationTimerCallback,oneshot=True)
 
     def roomIsCleaned(self):
     # checks if all points in selected room received enough energy
@@ -281,7 +281,7 @@ class cleaningNode:
         # checks if amounts of points to be cleaned is below a specidic threshold
         status=int(100*self.amountToBeCleaned/self.totalToBeCleaned)<self.AMOUNT_THRESHOLD
         if status:
-            self.motionTimer.shutdown()
+            self.operationTimer.shutdown()
             self.cleaningTimer.shutdown()
         return status
           
@@ -313,14 +313,14 @@ class cleaningNode:
             # returns farest point; usend when robot is stuck
             return self.convertToWorldPosition(coord2D(scores[-1,1],scores[-1,0]))
         # neighbourhood edge size in MAP points; must be odd
-        neigh_edge=5
+        neigh_size=5
         # compute local and average (in a defined neighbourhood) energy received by points
         neigh_energies=[]
         energies=[]
         for x,y in scores[:,:2]:
             energies.append(self.globalUVamount[int(x),int(y)])
             neigh_energies.append(np.average(self.globalUVamount[\
-              int(x-(neigh_edge**2-1)/2):int(x+(neigh_edge**2-1)/2),int(y-(neigh_edge**2-1)/2):int(y+(neigh_edge**2-1)/2)]))
+              int(x-(neigh_size**2-1)/2):int(x+(neigh_size**2-1)/2),int(y-(neigh_size**2-1)/2):int(y+(neigh_size**2-1)/2)]))
         # concatenates columns to score array
         scores=np.c_[scores,np.array(energies),np.array(neigh_energies)]
         # computes and minimize the score to find the next goal
@@ -398,8 +398,6 @@ class cleaningNode:
         ave_dist=np.average(distances)
         distances=distances/ave_dist
         # coeff_dist=0.67
-        # TODO coeff function of number of unreachable points
-        # the higher this coeficients, the better
         # discount_dist=0.55
         discount_dist=self.adaptiveDistanceDiscount()
         # cost_dist=0
@@ -518,7 +516,7 @@ class cleaningNode:
 if __name__ == '__main__':
     print('==#== UV CLEANING NODE ==#==\n')
     rospy.init_node('cleaner',anonymous=True)
-    explorer=cleaningNode()
+    cleaner=cleaningNode()
     try:
        rospy.spin()
     except KeyboardInterrupt:

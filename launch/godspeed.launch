@@ -3,24 +3,29 @@
   <!--env name="TURTLEBOT3_MODEL" value="burger"/-->
   <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]"/>
   <arg name="map_file" default="$(find navigationturt)/maps/map_20211018_125057.yaml"/>
+  <arg name="x_pos" default="-3.0"/>
+  <arg name="y_pos" default="1.0"/>
   <arg name="open_rviz" default="true"/>
   <arg name="move_forward_only" default="false"/>
   <arg name="gui" default="false"/>
   <arg name="slam_methods" default="gmapping"/>
   <arg name="node_start_delay" default="3.0"/>
-  <arg name="exploration_mode" default="false"/>
   <arg name="teleoperation_mode" default="false"/>
+  <arg name="exploration_mode" default="false"/>
   <arg name="uv_cleaning" default="true"/>
   <arg name="use_navigation_node" default="$(eval not arg('exploration_mode') and not arg('uv_cleaning'))"/>
   <arg name="use_objectives_file" default="$(eval not arg('teleoperation_mode') and not arg('exploration_mode') and not arg('uv_cleaning'))"/>
   <arg name="objectives_file_location" default="/catkin_ws/src/navigationturt/scripts/objectives.txt"/>
   <!-- <param name="exploration_mode" type="bool" value="$(arg exploration_mode)" /> -->
+  <arg name="exercise1" default="false"/>
   
 
   <!-- SIMULATION -->
   <include file="$(find navigationturt)/launch/include/big_house.launch">
     <arg name="gui" value="$(arg gui)"/>
     <arg name="model" value="$(arg model)"/>
+    <arg name="x_pos" value="$(arg x_pos)"/>
+    <arg name="y_pos" value="$(arg y_pos)"/>
   </include>  
 
   <!-- TURTLEBOT3 -->
@@ -31,14 +36,17 @@
   </include>
 
   <!-- MOVE_BASE -->
-  <include file="$(find navigationturt)/launch/include/move_base.launch">
-    <arg name="model" value="$(arg model)" />
-    <arg name="move_forward_only" value="$(arg move_forward_only)"/>
-    <arg unless="$(arg exploration_mode)" name="map_type" value="static"/>
-    <arg if="$(arg exploration_mode)" name="map_type" value="dynamic"/>
-  </include>
+  <group unless="$(eval arg('exercise1'))">
+    <include file="$(find navigationturt)/launch/include/move_base.launch">
+      <arg name="model" value="$(arg model)" />
+      <arg name="move_forward_only" value="$(arg move_forward_only)"/>
+      <arg unless="$(arg exploration_mode)" name="map_type" value="static"/>
+      <arg if="$(arg exploration_mode)" name="map_type" value="dynamic"/>
+    </include>
+  </group>
 
-  <group unless="$(arg exploration_mode)">
+  <!-- <group unless="$(arg exploration_mode)"> -->
+  <group if="$(eval not arg('exploration_mode') and not arg('exercise1'))">
     <!-- MAPPED ENVIRONMENT -->
     <include file="$(find navigationturt)/launch/navigation.launch">
       <!--arg name="model" value="$(arg model)" />
@@ -86,6 +94,7 @@
     <param unless="$(arg use_objectives_file)" name="~objectives_file_location" 
                                     value=""/>-->
 
+  <!-- TODO -->
   <!-- MONITOR NODE --><!--
   <node name="turt_monitor" 
 	pkg="navigationturt" 
@@ -96,6 +105,7 @@
 	launch-prefix="xterm -e /bin/bash -c 'sleep $(arg node_start_delay); $0 $@' "
   />-->
 
+  <!-- TODO -->
   <!-- CONTROL NODE --><!--
   <node name="turt_control" 
 	pkg="navigationturt" 

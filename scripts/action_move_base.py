@@ -57,6 +57,10 @@ class navigationNode():
         # initialize move_base
         self.MBClient=actionlib.SimpleActionClient('move_base',MoveBaseAction)
         self.MBClient.wait_for_server()
+        # if not self.MBClient.wait_for_server():
+        #     rospy.logerr("Action server not available!")
+        #     rospy.signal_shutdown("Action server not available!")
+        #     return
         self.MBGoal=MoveBaseGoal()
         self.PlanClient=rospy.ServiceProxy('/move_base/make_plan',GetPlan)
         # topics to listen
@@ -84,18 +88,14 @@ class navigationNode():
         self.totalTargets=len(targets)
         self.targetsServed=0
         self.targets=targets
-        print("List of {} objectives received from file,\n deactivating\
-             /Setpoint topic listener until it's fully served".format(self.totalTargets))
+        print("List of {} objectives received from file,\ndeactivating /Setpoint topic listener until it's fully served".\
+         format(self.totalTargets))
         self.setpointListener.unregister()
         # launch the specific objective list timer
         self.targetsTimer=rospy.Timer(rospy.Duration(0.1),self.targetsTimerCallback)
 
     def initializeSetpointListener(self):
         self.setpointListener = rospy.Subscriber(self.setpointTopic,Setpoint,self.setpointCallback,queue_size=5)
-
-    def setNodeParameter(self,param1=None):
-    # changes parameter of the robot at runtime
-        if not param1==None:self.param1=param1
 
 
     # DATA ################################################################
@@ -148,8 +148,9 @@ class navigationNode():
             newGoal=self.targetsSplitter(self.targets,self.targetsServed)
             self.requestNewGoal(coord2D(*newGoal))
         elif self.targetsServed==self.totalTargets:
-            print('Objectives list fully served!\npublish \
-              navigationturt.msg.Setpoint on /Setpoint to request new targets')
+            text1='Objectives list fully served!\npublish '
+            text2='navigationturt.msg.Setpoint on /Setpoint to request new targets'
+            print(text1+text2)
             self.targetsTimer.shutdown()
             # starts again listener on /Setpoint
             self.initializeSetpointListener()
@@ -241,30 +242,28 @@ class navigationNode():
 
     # MOTION ##############################################################
     
-    def requestNewGoal(self,point,check_plan=True,tolerance=0.2,duration=0,print_message=False):
+    def requestNewGoal(self,point,check_plan=False,tolerance=0.2,duration=0,print_message=False):
     # construct move_base goal request
         if self.verifyGoalPoint(point=point,check_plan=check_plan,tolerance=tolerance,\
          duration=duration,print_message=print_message):
             self.updateReferencePose()
             self.MBGoal.target_pose.header.frame_id='map'
-            self.MBGoal.target_pose.header.stamp = rospy.Time.now()
-            self.MBGoal.target_pose.pose.position.x = self.nextWGoal.x
-            self.MBGoal.target_pose.pose.position.y =  self.nextWGoal.y
+            self.MBGoal.target_pose.header.stamp=rospy.Time.now()
+            self.MBGoal.target_pose.pose.position.x=self.nextWGoal.x
+            self.MBGoal.target_pose.pose.position.y=self.nextWGoal.y
             self.MBGoal.target_pose.pose.position.z=0
-            # self.MBGoal.target_pose.pose.position.x = point.x
-            # self.MBGoal.target_pose.pose.position.y =  point.y
-            # (qx,qy,qz,qw)=quaternion_from_euler(*(0,0,point.yaw))
             (qx,qy,qz,qw)=quaternion_from_euler(*(0,0,self.nextWGoal.yaw))
-            self.MBGoal.target_pose.pose.orientation.x = qx
-            self.MBGoal.target_pose.pose.orientation.y = qy
-            self.MBGoal.target_pose.pose.orientation.z = qz
-            self.MBGoal.target_pose.pose.orientation.w = qw
+            self.MBGoal.target_pose.pose.orientation.x=qx
+            self.MBGoal.target_pose.pose.orientation.y=qy
+            self.MBGoal.target_pose.pose.orientation.z=qz
+            self.MBGoal.target_pose.pose.orientation.w=qw
             #remove obstacles from costmap
             # import std_srvs.srv
             # rospy.ServiceProxy('move_base/clear_costmaps', std_srvs.srv.Empty)
             # send the goal to move_base
             self.MBClient.send_goal(self.MBGoal)
-            # call motion monitor
+            # self.MBClient.send_goal(self.MBGoal,self.done_cb,self.active_cb,self.feedback_cb)
+            # activates motion monitor
             self.resetMonitor()
             self.monitor=rospy.Timer(rospy.Duration(self.MOTION_MONITOR_PERIOD),self.motionMonitor)#straight_recovery))
             requestResult=self.MBClient.wait_for_result() if duration==0\
@@ -276,12 +275,57 @@ class navigationNode():
                 else: print('xxx-- move base cannot reach the goal --xxx')
             return requestResult
 
-    def verifyGoalPoint(self,point,check_plan=True,tolerance=0.3,duration=0,print_message=False):
+    ''' TODO
+    eg of using send_goal callbacks
+    somewhere_else():self.goal_count=0
+    def active_cb(self):
+    # callback when goal is sent by client
+        # rospy.loginfo("Goal pose "+str(self.goal_cnt+1)+" is now being processed by the Action Server...")
+        pass
+    def feedback_cb(self,feedback):
+    # callback after feedback when server receives goal
+        # rospy.loginfo("Feedback for goal pose "+str(self.goal_cnt+1)+" received")
+        pass
+    def done_cb(self,status,result):
+    # callback when cancel request/ goal reached
+        #self.goal_count+=1
+        if status == 2:
+            rospy.loginfo("Goal pose "+str(self.goal_cnt)+" received a cancel request after it\
+            started executing, completed execution!")
+        if status == 3:
+            rospy.loginfo("Goal pose "+str(self.goal_cnt)+" reached")
+            if self.goal_cnt< len(self.pose_seq):
+                next_goal = MoveBaseGoal()
+                next_goal.target_pose.header.frame_id = "map"
+                next_goal.target_pose.header.stamp = rospy.Time.now()next_goal.target_pose.pose = self.pose_seq[self.goal_cnt]
+                rospy.loginfo("Sending goal pose "+str(self.goal_cnt+1)+" to Action Server")
+                rospy.loginfo(str(self.pose_seq[self.goal_cnt]))
+                self.client.send_goal(next_goal, self.done_cb, self.active_cb, self.feedback_cb)
+            else:
+                rospy.loginfo("Final goal pose reached!")
+                rospy.signal_shutdown("Final goal pose reached!")
+                return
+        if status == 4:
+            rospy.loginfo("Goal pose "+str(self.goal_cnt)+" was aborted by the Action Server")
+            rospy.signal_shutdown("Goal pose "+str(self.goal_cnt)+" aborted, shutting down!")
+            return
+        if status == 5:
+            rospy.loginfo("Goal pose "+str(self.goal_cnt)+" has been rejected by the Action\
+            Server")
+            rospy.signal_shutdown("Goal pose "+str(self.goal_cnt)+" rejected, shutting down!")
+            return
+        if status == 8:
+            rospy.loginfo("Goal pose "+str(self.goal_cnt)+" received a cancel request before it\
+            started executing, successfully cancelled!")
+    '''
+    
+    def verifyGoalPoint(self,point,check_plan=False,tolerance=0.3,duration=0,print_message=False):
     # verifies feasibility of requested goal and 
         point.x=round(point.x,4)
         point.y=round(point.y,4)
         point.yaw=round(point.yaw,4)
-        # if check_plan:
+        if check_plan:
+            pass
         #     start=PoseStamped()
         #     start.pose.position.x=self.currentWpoint.x
         #     start.pose.position.y=self.currentWpoint.y
@@ -311,8 +355,7 @@ class navigationNode():
         #     # if planResponse: 
         #     #     self.nextGoalPoses=GetPlanResponse()
         #     #     self.nextGoalPoses.plan.poses=???
-        # else: planResponse=True
-        planResponse=True
+        else: planResponse=True
         if point.x< self.MIN_X_SETPOINT or\
         point.x>self.MAX_X_SETPOINT or\
         point.y<self.MIN_Y_SETPOINT or\

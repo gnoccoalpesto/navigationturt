@@ -6,7 +6,7 @@ import time
 #usage: command=command_string; os.system(command)
 import std_msgs.msg
 
-class mapperClass:
+class mapperNode:
     def __init__(self):
         self.completionTopic=rospy.get_param('~completed_exploration_topic','/exploration_completed')
         rospy.Subscriber(self.completionTopic,std_msgs.msg.Bool,self.mappingRequest,queue_size=1)
@@ -29,7 +29,7 @@ if __name__=="__main__":
 
     print('==#== MAP SAVER NODE ==#==')
     rospy.init_node("mapper",anonymous=True)
-    mapper=mapperClass()
+    mapper=mapperNode()
     try:
         rospy.spin()
     except KeyboardInterrupt:

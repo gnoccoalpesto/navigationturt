@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]"/>
+  <arg name="x_pos" default="-3.0"/>
+  <arg name="y_pos" default="1.0"/>
+  <arg name="node_start_delay" default="3.0"/>
+  
+  <include file="$(find navigationturt)/launch/godspeed.launch">
+    <arg name="gui" value="true"/>
+    <arg name="model" value="$(arg model)"/>
+    <arg name="x_pos" value="$(arg x_pos)"/>
+    <arg name="y_pos" value="$(arg y_pos)"/>
+    <arg name="map_file"  value=""/>
+    <arg name="node_start_delay" value="$(arg node_start_delay)"/>
+    <arg name="exploration_mode" value="False"/>
+    <arg name="teleoperation_mode" value="false"/>
+    <arg name="uv_cleaning" value="false"/>
+    <arg name="use_navigation_node" value="false"/>
+    <arg name="use_objectives_file" value="false"/>
+    <arg name="exercise1" value="true"/>
+  </include>  
+
+</launch>

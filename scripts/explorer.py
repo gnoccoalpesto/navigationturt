@@ -13,7 +13,7 @@ from geometry_msgs.msg import Twist
 from tf.transformations import euler_from_quaternion#, quaternion_from_euler
 from action_move_base import navigationNode, coord2D
 import numpy as np
-from cv2 import connectedComponents
+# from cv2 import connectedComponents
 # pip2 install opencv-python==4.2.0.32 not recognised here
 # pip install opencv-python
 
@@ -44,26 +44,24 @@ class explorationNode:
         self.explorationIteration=0
         self.frontiers=[]
         self.map=OccupancyGrid()
-        self.navigator=navigationNode()
         self.UNKNOWN_THRESHOLD=1# min number of unknown neighbour to look for
         self.FREESPACE_THRESHOLD=1# min number of surrounding free space tiles to look for
         self.OBSTACLE_DISTANCE=0.4# max distance [meters] to consider an obstacle
         
         # initialize map
         self.initializeMap()
-        # wait for move_base server
-        self.MBClient=actionlib.SimpleActionClient('move_base',MoveBaseAction)
-        self.MBClient.wait_for_server()
+        # initialize move base client node
+        self.navigator=navigationNode()
+        # velocity broadcaster for full rotation
+        self.velocityChatter=rospy.Publisher(self.velocityTopic,Twist,queue_size=1)
         # initiate odometry listening
-        print('__ starting environment exploration __\n')
         self.poseListener=rospy.Subscriber(self.odometryTopic,Odometry,self.poseCallback)
         NODE_START_DELAY=rospy.get_param('node_start_delay',default=3.0)
         self.explorationDuration=time.time()-NODE_START_DELAY
         # initiate exploration call; single shot to avoid multiple instances
+        print('__ starting environment exploration __\n')
         self.explorationTimer=rospy.Timer(rospy.Duration(NODE_START_DELAY),\
             self.explorationTimerCallback,oneshot=True)
-        # velocity broadcaster for full rotation
-        self.velocityChatter=rospy.Publisher(self.velocityTopic,Twist,queue_size=1)
 
     # MAP #######################################################
 
@@ -122,31 +120,34 @@ class explorationNode:
         # look around performing a full rotation in place
         # NEED TO CHECK IS STUCK WHILE ROTATING
         self.doABarrellRoll()
-        # compute frontier points
+        # find if any frontier point is present by locating them
         if not self.localizeFrontiers():
-            # broadcast exploration completion
+            # all frontiers explored
             self.explorationCompleted=True
             completionMessage=Bool()
             completionMessage.data=True
-            # SUBSTITUTE WITH SERVICE TO AVOID HAVING ANOTHER TERMINAL FOR MAPPER FEEDBACK
+            # signals completed exploration message
+            # TODO SUBSTITUTE WITH SERVICE TO AVOID HAVING ANOTHER TERMINAL FOR MAPPER FEEDBACK
             self.completionChatter=rospy.Publisher(self.completionTopic,Bool,queue_size=1)#,latch=True)
             self.completionChatter.publish(completionMessage)
-            
+            # shows exploration's statistichs
             self.explorationDuration=time.time()-self.explorationDuration
             print('no frontier point found: EXPLORATION COMPLETED in {} seconds\
                 ({} iterations)'.format(self.explorationDuration,self.explorationIteration))
-            input('busy wait')
+            # shuts down exploration timer
             self.explorationTimer.shutdown()
         else:        
+            # frontiers to explore still present
             self.explorationIteration+=1
             print('\n----\nITERATION: {}\nreference point {}, {} ({}, {})'.format(self.explorationIteration,\
                 self.referenceWpoint.x,self.referenceWpoint.y,self.referenceMpoint.x,self.referenceMpoint.y))
-            # compute the next frontier to explore
+            # computes the next frontier to explore
             self.nextMGoal,self.nextWGoal=self.computeNextGoal()
-            # start goal distance computation
+            # starts goal distance computation
             # self.goalMeter=rospy.Timer(rospy.Duration(0.5),self.goalDistance())
             print('next point to explore: {}, {} ({}, {})\n'.format(\
                     self.nextWGoal.x,self.nextWGoal.y,self.nextMGoal.x,self.nextMGoal.y))
+            # computes quantities to select timeout of move_base request
             referenceDistance=self.pointDistance(self.referenceWpoint,self.nextWGoal)
             timeToReachGoal=56+int(1.7*referenceDistance/self.navigator.MAX_LINEAR_VELOCITY)
             # send goal to move_base    
@@ -159,16 +160,20 @@ class explorationNode:
     
     def localizeFrontiers(self):
     # frontier points identification
+        # updates map data
         self.updateMap()
         self.frontiers=[]
-        # self.labelledFrontiers= [[-1] * self.mapHeight for _ in range(self.mapWidth)]
+        # initializes count of already labelled points
         self.labelledFrontiers=np.ones((self.mapHeight,self.mapWidth))*-1
+        # initializes count of map points already explored
         self.chartedTiles=0
         for x in range(self.mapWidth):
             for y in range(self.mapHeight):
+                # assesses if a point is already charted
                 self.chartedTiles+=self.isCharted(x,y)
+                # assesses if a point is a possible frontier
                 if self.isEmptySpace(x,y) and self.hasFreeSpaceAround(x,y)\
-                and self.hasUnknownNeighbour(x,y):
+                  and self.hasUnknownNeighbour(x,y):
                     self.frontiers.append((x,y))
                     self.labelledFrontiers[x][y]=0
         if self.frontiers==[]: return False
@@ -216,6 +221,10 @@ class explorationNode:
         return nextMGoal,nextWGoal
         
     def selectionCoefficient(self):
+        ''' incremental coefficient to select the chosen frontier
+            starts from a point closer than 66% of other frontiers
+            up to 80%
+        '''
         chartedPercentage=self.chartedTiles/self.mapTiles
         return 2 if chartedPercentage>0.4 else 2*chartedPercentage
         
@@ -238,7 +247,7 @@ class explorationNode:
                         (point_x, point_y-1), (point_x-1, point_y),\
                         (point_x+1, point_y-1), (point_x+1, point_y+1),\
                         (point_x-1, point_y-1), (point_x-1, point_y+1)]
-                # IGNORE since working
+                # NOTE FOLLOWING LINE WORKS BUT MARKED AS ERROR IN PYTHON 2.7 AND VS CODE
                 neighbours=filter(lambda (x,y):x>=0 and x<self.mapHeight and y>=0 and y<self.mapWidth\
                     and not self.labelledFrontiers[point_x][point_y]==-1,neighbours)
                 # if neighbours==[] or 
@@ -291,6 +300,20 @@ class explorationNode:
     # checks if a poit is empty space
         return self.map[point_y*self.mapWidth+point_x]==0
 
+    def hasFreeSpaceAround(self,point_x,point_y,obstacleMapDistance=0):
+    # checks if a possible frontier has obstacles too close
+        freespaceCounter=0
+        if obstacleMapDistance==0:
+            obstacleMapDistance=int(self.OBSTACLE_DISTANCE/self.mapResolution)
+        # in a specific square around the candidate point
+        for query in range(-obstacleMapDistance,obstacleMapDistance+1):
+            query_x=point_x+query
+            query_y=point_y+query
+            if query_x>0 and query_x<self.mapWidth and query_y>0 and query_y<self.mapHeight:
+                if not self.map[query_y*self.mapWidth+query_x]>0: freespaceCounter+=1
+        if freespaceCounter>=self.FREESPACE_THRESHOLD: return True
+        else: return False
+
     def hasUnknownNeighbour(self,point_x,point_y,connected8=False):
     # checks if enough neighboors are still uncharted space
         neighbourCounter=0
@@ -304,9 +327,10 @@ class explorationNode:
                     (point_x, point_y-1), (point_x-1, point_y),\
                     (point_x+1, point_y-1), (point_x+1, point_y+1),\
                     (point_x-1, point_y-1), (point_x-1, point_y+1)]
-        # IGNORE since working
+        # removes points outside the considered map
+        # NOTE FOLLOWING LINE WORKS BUT MARKED AS ERROR IN PYTHON 2.7 AND VS CODE
         neighbours=filter(lambda (x,y):x>=0 and x<self.mapHeight and y>=0 and y<self.mapWidth,neighbours)
-        filter
+        # checks if the point is un-explored
         for neigh in neighbours:
             if self.map[neigh[1]*self.mapWidth+neigh[0]]==-1:
                 neighbourCounter+=1
@@ -314,20 +338,6 @@ class explorationNode:
         if (not connected8 and neighbourCounter>=self.UNKNOWN_THRESHOLD)\
         or (connected8 and neighbourCounter>=2*self.UNKNOWN_THRESHOLD): 
             return True
-        else: return False
-
-    def hasFreeSpaceAround(self,point_x,point_y,obstacleMapDistance=0):
-    # checks if a possible frontier has obstacles too close
-        freespaceCounter=0
-        if obstacleMapDistance==0:
-            obstacleMapDistance=int(self.OBSTACLE_DISTANCE/self.mapResolution)
-        # in a specific square around the candidate point
-        for query in range(-obstacleMapDistance,obstacleMapDistance+1):
-            query_x=point_x+query
-            query_y=point_y+query
-            if query_x>0 and query_x<self.mapWidth and query_y>0 and query_y<self.mapHeight:
-                if not self.map[query_y*self.mapWidth+query_x]>0: freespaceCounter+=1
-        if freespaceCounter>=self.FREESPACE_THRESHOLD: return True
         else: return False
 
 
