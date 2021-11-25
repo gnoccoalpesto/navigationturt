@@ -1,6 +1,5 @@
 <?xml version="1.0"?>
 <launch>
-  <!--env name="TURTLEBOT3_MODEL" value="burger"/-->
   <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]"/>
   <arg name="map_file" default="$(find navigationturt)/maps/map_20211018_125057.yaml"/>
   <arg name="x_pos" default="-3.0"/>

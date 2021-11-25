@@ -8,7 +8,8 @@
   <arg name="move_forward_only" default="false"/>
   <arg name="gui" default="false"/>
   <arg name="node_start_delay" default="3.0"/>
-  <arg name="objectives_file_location" default="/catkin_ws/src/navigationturt/scripts/objectives.txt"/>
+  <arg name="objectives_file_location" default="$(find navigationturt)/scripts/objectives.txt"/>
+  <!-- <arg name="objectives_file_location" default="/catkin_ws/src/navigationturt/scripts/objectives.txt"/> -->
 
    <include file="$(find navigationturt)/launch/godspeed.launch">
     <arg name="gui" value="$(arg gui)"/>
