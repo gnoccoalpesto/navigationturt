@@ -1,11 +1,19 @@
 IRM PROJECT - TURTLEBOT3 NAVIGATION in closed environment
 
-simulation of the environment
-autonomous navigation and mapping w/ slam
-autonomous exploration using the map
-autonomous navigation following a specific rule (UV irradiation on walls)
+TASK1) simulation of the environment
 
+TASK 2) autonomous exploration and mapping w/ slam
 
-possible variation:
-	navigation node/routine always reads a topic relative to goal
-	goal is set by user OR exploration node
+TASK 3) autonomous navigation using map and Navigation Stack
+
+TASK4) autonomous path creation and cleaning of a room with simulated UV light
+
+#INSTALLATION#
+
+import this package in a workspace containing turtlebot3, turtlebot3_simulations, turtlebot3_msgs and turtlebot3_big_house 
+
+#USAGE#
+
+roslaunch navigationturt taskK.launch
+
+substitute K with the correspective number {1,2,3,4} of the chosen task
